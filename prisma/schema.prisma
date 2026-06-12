@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Demanda {
+  id              Int       @id @default(autoincrement())
+  numero          Int       @unique
+  sistema         String
+  titulo          String
+  descricao       String
+  solicitante     String
+  orgao           String?
+  origem          String
+  status          String
+  responsavel     String
+  prioridade      String?
+  dataSolicitacao DateTime
+  dataCriacao     DateTime  @default(now())
+  dataAtualizacao DateTime  @updatedAt
+
+  // Relations
+  decisoes        Decisao[]
+  comentarios     Comentario[]
+  anexos          Anexo[]
+  historico       Historico[]
+
+  @@index([numero])
+  @@index([status])
+  @@index([sistema])
+}
+
+model Decisao {
+  id              Int       @id @default(autoincrement())
+  demanda         Demanda   @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  demandaId       Int
+  dataDecisao     DateTime
+  descricao       String
+  participantes   String?
+  origem          String
+  dataCriacao     DateTime  @default(now())
+
+  @@index([demandaId])
+}
+
+model Comentario {
+  id              Int       @id @default(autoincrement())
+  demanda         Demanda   @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  demandaId       Int
+  autor           String
+  comentario      String
+  dataCriacao     DateTime  @default(now())
+
+  @@index([demandaId])
+}
+
+model Anexo {
+  id              Int          @id @default(autoincrement())
+  demanda         Demanda      @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  demandaId       Int
+  nomeArquivo     String
+  caminhoArquivo  String
+  dataInclusao    DateTime     @default(now())
+  usuario         String
+  tipoArquivo     String?
+  tamanhoArquivo  Int?
+  conteudoBase64  String?
+
+  @@index([demandaId])
+}
+
+model Historico {
+  id              Int       @id @default(autoincrement())
+  demanda         Demanda   @relation(fields: [demandaId], references: [id], onDelete: Cascade)
+  demandaId       Int
+  acao            String
+  usuario         String
+  dataHora        DateTime  @default(now())
+  valorAnterior   String?
+  valorNovo       String?
+
+  @@index([demandaId])
+  @@index([dataHora])
+}
+
+model Responsavel {
+  id        Int      @id @default(autoincrement())
+  nome      String
+  email     String?
+  setorId   Int?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  setor     Setor?   @relation(fields: [setorId], references: [id], onDelete: SetNull)
+
+  @@index([ativo])
+  @@index([setorId])
+}
+
+model Setor {
+  id          Int          @id @default(autoincrement())
+  nome        String
+  descricao   String?
+  ativo       Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  responsaveis Responsavel[]
+
+  @@index([ativo])
+  @@unique([nome])
+}
