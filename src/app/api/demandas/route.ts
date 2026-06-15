@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { demandaCreateSchema } from '@/lib/validations';
+import { log } from 'console';
 
 export async function GET() {
   try {
@@ -16,8 +17,10 @@ export async function GET() {
         historico: true,
       },
     });
+    log('Fetched demandas:', demandas);
     return NextResponse.json(demandas);
   } catch (error) {
+    log('Error fetching demandas:', error);
     console.error('Error fetching demandas:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
