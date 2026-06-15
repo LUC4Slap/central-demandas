@@ -1,36 +1,114 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import type { Responsavel } from '@/types';
-import FileDropzone, { type DropzoneFile } from '@/components/FileDropzone';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import type { Demanda, Responsavel } from "@/types";
 
-const FILE_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.png', '.jpg', '.jpeg', '.zip'];
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+interface EditarDemandaPageProps {
+  params: Promise<{ id: string }>;
+}
 
-export default function NovaDemandaPage() {
+const ORIGEM_OPTIONS = [
+  "E-mail", "Reunião", "Teams", "WhatsApp", "Telefone", "Ofício", "Outro",
+];
+
+const STATUS_OPTIONS = [
+  "Recebida", "Em Análise", "Refinamento", "Desenvolvimento",
+  "Homologação", "Concluída", "Cancelada",
+];
+
+const PRIORIDADE_OPTIONS = ["Alta", "Média", "Baixa"];
+
+type FormState = {
+  sistema: string;
+  titulo: string;
+  descricao: string;
+  solicitante: string;
+  orgao: string;
+  origem: string;
+  status: string;
+  responsavel: string;
+  prioridade: string;
+  dataSolicitacao: string;
+};
+
+const EMPTY_FORM: FormState = {
+  sistema: "",
+  titulo: "",
+  descricao: "",
+  solicitante: "",
+  orgao: "",
+  origem: "",
+  status: "Recebida",
+  responsavel: "",
+  prioridade: "",
+  dataSolicitacao: "",
+};
+
+function toDateInput(value: string) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().split("T")[0];
+}
+
+export default function EditarDemandaPage({ params }: EditarDemandaPageProps) {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [demandaId, setDemandaId] = useState<string | null>(null);
+  const [original, setOriginal] = useState<Demanda | null>(null);
+  const [formData, setFormData] = useState<FormState>(EMPTY_FORM);
   const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
-  const [pendingFiles, setPendingFiles] = useState<DropzoneFile[]>([]);
-  const [uploadingFiles, setUploadingFiles] = useState(false);
-  const [formData, setFormData] = useState({
-    sistema: '',
-    titulo: '',
-    descricao: '',
-    solicitante: '',
-    orgao: '',
-    origem: '',
-    status: 'Recebida',
-    responsavel: '',
-    prioridade: '',
-    dataSolicitacao: new Date().toISOString().split('T')[0],
-  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/responsaveis')
+    params.then(({ id }) => setDemandaId(id));
+  }, [params]);
+
+  useEffect(() => {
+    if (!demandaId) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/demandas/${demandaId}`);
+        if (!res.ok) {
+          if (!cancelled) setError("Demanda não encontrada");
+          return;
+        }
+        const data: Demanda = await res.json();
+        if (cancelled) return;
+        setOriginal(data);
+        setFormData({
+          sistema: data.sistema ?? "",
+          titulo: data.titulo ?? "",
+          descricao: data.descricao ?? "",
+          solicitante: data.solicitante ?? "",
+          orgao: data.orgao ?? "",
+          origem: data.origem ?? "",
+          status: data.status ?? "Recebida",
+          responsavel: data.responsavel ?? "",
+          prioridade: data.prioridade ?? "",
+          dataSolicitacao: toDateInput(data.dataSolicitacao),
+        });
+      } catch (err) {
+        if (!cancelled) {
+          console.error(err);
+          setError("Falha ao carregar demanda");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [demandaId]);
+
+  useEffect(() => {
+    fetch("/api/responsaveis")
       .then((res) => res.json())
       .then((data) => setResponsaveis(data))
       .catch(() => {});
@@ -38,81 +116,93 @@ export default function NovaDemandaPage() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (!demandaId) return;
+    setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
-      const res = await fetch('/api/demandas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+      const res = await fetch(`/api/demandas/${demandaId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          orgao: formData.orgao || null,
+          prioridade: formData.prioridade || null,
+          dataSolicitacao: formData.dataSolicitacao
+            ? new Date(`${formData.dataSolicitacao}T12:00:00`).toISOString()
+            : formData.dataSolicitacao,
+          usuario: formData.solicitante || "system",
+        }),
       });
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error ? JSON.stringify(errData.error) : 'Falha ao criar demanda');
+        throw new Error(errData.error ? JSON.stringify(errData.error) : "Falha ao atualizar demanda");
       }
-      const newDemanda = await res.json();
-
-      if (pendingFiles.length > 0) {
-        setUploadingFiles(true);
-        for (const pf of pendingFiles) {
-          try {
-            await fetch('/api/anexos', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                demandaId: newDemanda.id,
-                nomeArquivo: pf.file.name,
-                usuario: formData.solicitante,
-                tipoArquivo: pf.file.type,
-                tamanhoArquivo: pf.file.size,
-                conteudoBase64: pf.base64,
-              }),
-            });
-          } catch {
-            setError(`Falha ao enviar anexo: ${pf.file.name}`);
-          }
-        }
-      }
-
-      router.push(`/demandas/${newDemanda.id}`);
+      setSuccess("Demanda atualizada com sucesso!");
+      setTimeout(() => router.push(`/demandas/${demandaId}`), 600);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao criar demanda');
+      setError(err instanceof Error ? err.message : "Falha ao atualizar demanda");
     } finally {
-      setLoading(false);
-      setUploadingFiles(false);
+      setSaving(false);
     }
   };
 
-  const isSubmitting = loading || uploadingFiles;
+  if (loading) {
+    return (
+      <div className="px-4 py-8 lg:px-8">
+        <div className="flex items-center justify-center h-64 text-muted">Carregando...</div>
+      </div>
+    );
+  }
+
+  if (error && !original) {
+    return (
+      <div className="px-4 py-8 lg:px-8">
+        <div className="rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>
+        <Link href="/demandas" className="inline-block mt-4 text-sm text-[var(--primary)] hover:underline">
+          Voltar à lista
+        </Link>
+      </div>
+    );
+  }
+
+  if (!original) return null;
 
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="max-w-3xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
-          <Link href="/demandas" className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors mb-4">
+          <Link
+            href={`/demandas/${demandaId}`}
+            className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors mb-4"
+          >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            Voltar à lista
+            Voltar à demanda
           </Link>
-          <h1 className="text-2xl font-bold tracking-tight">Nova Demanda</h1>
-          <p className="text-sm text-muted mt-1">Preencha os dados para registrar uma nova demanda.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Editar Demanda</h1>
+          <p className="text-sm text-muted mt-1">
+            <span className="font-mono text-xs font-semibold">
+              DEM-{String(original.numero).padStart(4, "0")}
+            </span>{" "}
+            — {original.titulo}
+          </p>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
+          <div className="mb-6 rounded-lg bg-red-50 p-4 text-sm text-red-700">{error}</div>
+        )}
+        {success && (
+          <div className="mb-6 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-700">{success}</div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic info */}
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6">
             <h2 className="text-sm font-semibold text-foreground mb-4">Informações básicas</h2>
             <div className="space-y-4">
@@ -125,8 +215,7 @@ export default function NovaDemandaPage() {
                     value={formData.sistema}
                     onChange={handleChange}
                     required
-                    placeholder="Nome do sistema"
-                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -137,28 +226,27 @@ export default function NovaDemandaPage() {
                     value={formData.titulo}
                     onChange={handleChange}
                     required
-                    placeholder="Resumo da demanda"
-                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                   />
                 </div>
               </div>
-
               <div>
                 <label className="block text-xs font-medium text-muted mb-1.5">Descrição *</label>
                 <textarea
                   name="descricao"
                   value={formData.descricao}
                   onChange={handleChange}
-                  rows={4}
+                  rows={5}
                   required
-                  placeholder="Descreva a demanda em detalhes..."
-                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent resize-none"
+                  className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent resize-none"
                 />
+                <p className="text-xs text-muted mt-1.5">
+                  {formData.descricao.length} caracteres
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Origin and requester */}
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6">
             <h2 className="text-sm font-semibold text-foreground mb-4">Solicitante e origem</h2>
             <div className="space-y-4">
@@ -171,8 +259,7 @@ export default function NovaDemandaPage() {
                     value={formData.solicitante}
                     onChange={handleChange}
                     required
-                    placeholder="Nome do solicitante"
-                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -182,12 +269,10 @@ export default function NovaDemandaPage() {
                     name="orgao"
                     value={formData.orgao}
                     onChange={handleChange}
-                    placeholder="Órgão ou departamento"
-                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
+                    className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                   />
                 </div>
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-muted mb-1.5">Origem *</label>
@@ -199,13 +284,9 @@ export default function NovaDemandaPage() {
                     className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                   >
                     <option value="">Selecione</option>
-                    <option value="E-mail">E-mail</option>
-                    <option value="Reunião">Reunião</option>
-                    <option value="Teams">Teams</option>
-                    <option value="WhatsApp">WhatsApp</option>
-                    <option value="Telefone">Telefone</option>
-                    <option value="Ofício">Ofício</option>
-                    <option value="Outro">Outro</option>
+                    {ORIGEM_OPTIONS.map((o) => (
+                      <option key={o} value={o}>{o}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -223,7 +304,6 @@ export default function NovaDemandaPage() {
             </div>
           </div>
 
-          {/* Assignment */}
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6">
             <h2 className="text-sm font-semibold text-foreground mb-4">Atribuição</h2>
             <div className="space-y-4">
@@ -238,18 +318,10 @@ export default function NovaDemandaPage() {
                     className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                   >
                     <option value="">Selecione</option>
-                    {responsaveis.filter(r => r.ativo).map((r) => (
+                    {responsaveis.filter((r) => r.ativo).map((r) => (
                       <option key={r.id} value={r.nome}>{r.nome}</option>
                     ))}
                   </select>
-                  {responsaveis.length === 0 && (
-                    <p className="text-xs text-muted mt-1.5">
-                      Nenhum responsável cadastrado.{' '}
-                      <Link href="/responsaveis" className="text-[var(--primary)] hover:underline">
-                        Cadastrar responsável
-                      </Link>
-                    </p>
-                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-muted mb-1.5">Prioridade</label>
@@ -260,13 +332,12 @@ export default function NovaDemandaPage() {
                     className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                   >
                     <option value="">Selecione</option>
-                    <option value="Alta">Alta</option>
-                    <option value="Média">Média</option>
-                    <option value="Baixa">Baixa</option>
+                    {PRIORIDADE_OPTIONS.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
                   </select>
                 </div>
               </div>
-
               <div>
                 <label className="block text-xs font-medium text-muted mb-1.5">Status</label>
                 <select
@@ -276,43 +347,27 @@ export default function NovaDemandaPage() {
                   required
                   className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                 >
-                  <option value="Recebida">Recebida</option>
-                  <option value="Em Análise">Em Análise</option>
-                  <option value="Refinamento">Refinamento</option>
-                  <option value="Desenvolvimento">Desenvolvimento</option>
-                  <option value="Homologação">Homologação</option>
-                  <option value="Concluída">Concluída</option>
-                  <option value="Cancelada">Cancelada</option>
+                  {STATUS_OPTIONS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
                 </select>
               </div>
             </div>
           </div>
 
-          {/* Attachments */}
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6">
-            <h2 className="text-sm font-semibold text-foreground mb-4">Anexos</h2>
-            <FileDropzone
-              onFilesChange={setPendingFiles}
-              accept={FILE_EXTENSIONS}
-              maxSize={MAX_FILE_SIZE}
-              multiple
-            />
-          </div>
-
-          {/* Actions */}
           <div className="flex items-center justify-end gap-3">
             <Link
-              href="/demandas"
+              href={`/demandas/${demandaId}`}
               className="px-4 py-2.5 text-sm font-medium text-foreground bg-[var(--surface)] border border-[var(--border)] rounded-lg hover:bg-[var(--surface-hover)] transition-colors"
             >
               Cancelar
             </Link>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={saving}
               className="px-4 py-2.5 text-sm font-medium text-white bg-[var(--primary)] hover:bg-[var(--primary-hover)] rounded-lg transition-colors disabled:opacity-50"
             >
-              {uploadingFiles ? 'Enviando anexos...' : loading ? 'Salvando...' : 'Criar Demanda'}
+              {saving ? "Salvando..." : "Salvar Alterações"}
             </button>
           </div>
         </form>

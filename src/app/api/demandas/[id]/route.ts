@@ -30,6 +30,24 @@ export async function GET(
   }
 }
 
+const TRACKED_FIELDS = [
+  'sistema', 'titulo', 'descricao', 'solicitante', 'orgao',
+  'origem', 'status', 'responsavel', 'prioridade', 'dataSolicitacao',
+] as const;
+
+type TrackedField = (typeof TRACKED_FIELDS)[number];
+
+function formatValue(field: TrackedField, value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (field === 'dataSolicitacao' && value instanceof Date) {
+    return value.toISOString().split('T')[0];
+  }
+  if (field === 'dataSolicitacao' && typeof value === 'string') {
+    return value.split('T')[0];
+  }
+  return String(value);
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -65,16 +83,30 @@ export async function PUT(
       data: updateData,
     });
 
-    await prisma.historico.create({
-      data: {
-        demandaId,
-        acao: 'Demanda atualizada',
-        usuario: validated.usuario || 'system',
-        dataHora: new Date(),
-        valorAnterior: JSON.stringify(existingDemanda),
-        valorNovo: JSON.stringify(updatedDemanda),
-      },
-    });
+    const changes: Array<{ campo: string; de: string; para: string }> = [];
+    for (const field of TRACKED_FIELDS) {
+      if (!(field in updateData)) continue;
+      const before = (existingDemanda as Record<string, unknown>)[field];
+      const after = (updatedDemanda as Record<string, unknown>)[field];
+      const beforeStr = formatValue(field, before);
+      const afterStr = formatValue(field, after);
+      if (beforeStr !== afterStr) {
+        changes.push({ campo: field, de: beforeStr, para: afterStr });
+      }
+    }
+
+    if (changes.length > 0) {
+      await prisma.historico.create({
+        data: {
+          demandaId,
+          acao: 'Demanda atualizada',
+          usuario: validated.usuario || 'system',
+          dataHora: new Date(),
+          valorAnterior: changes.map((c) => `${c.campo}: ${c.de}`).join('\n'),
+          valorNovo: changes.map((c) => `${c.campo}: ${c.para}`).join('\n'),
+        },
+      });
+    }
 
     return NextResponse.json(updatedDemanda);
   } catch (error) {
@@ -108,7 +140,7 @@ export async function DELETE(
         acao: 'Demanda excluída',
         usuario: 'system',
         dataHora: new Date(),
-        valorAnterior: JSON.stringify(existingDemanda),
+        valorAnterior: `Demanda ${String(existingDemanda.numero).padStart(4, '0')} - ${existingDemanda.titulo}`,
         valorNovo: null,
       },
     });

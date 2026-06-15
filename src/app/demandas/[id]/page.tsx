@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { Demanda, Anexo } from '@/types';
+import FileDropzone, { type DropzoneFile } from '@/components/FileDropzone';
+import ConfirmDeleteModal from '@/components/ConfirmDeleteModal';
 
 const FILE_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.png', '.jpg', '.jpeg', '.zip'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -27,6 +30,7 @@ export default function DemandaDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const router = useRouter();
   const [demandaId, setDemandaId] = useState<string | null>(null);
   const [demanda, setDemanda] = useState<Demanda | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,11 +47,14 @@ export default function DemandaDetailPage({
     autor: '',
     comentario: '',
   });
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [anexoUsuario, setAnexoUsuario] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<DropzoneFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [editingStatus, setEditingStatus] = useState(false);
   const [newStatus, setNewStatus] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     params.then(({ id }) => {
@@ -178,56 +185,35 @@ export default function DemandaDetailPage({
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-    if (!FILE_EXTENSIONS.includes(ext)) {
-      setError(`Tipo de arquivo não permitido. Tipos aceitos: ${FILE_EXTENSIONS.join(', ')}`);
-      return;
-    }
-    if (file.size > MAX_FILE_SIZE) {
-      setError('Arquivo muito grande. Tamanho máximo: 10MB');
-      return;
-    }
-    setSelectedFile(file);
-    setError(null);
-  };
-
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!demandaId || !selectedFile || !anexoUsuario) return;
+    if (!demandaId || pendingFiles.length === 0 || !anexoUsuario) return;
     setUploading(true);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
-
-      const res = await fetch('/api/anexos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          demandaId: parseInt(demandaId),
-          nomeArquivo: selectedFile.name,
-          usuario: anexoUsuario,
-          tipoArquivo: selectedFile.type,
-          tamanhoArquivo: selectedFile.size,
-          conteudoBase64: base64,
-        }),
-      });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Falha ao fazer upload');
+      for (const pf of pendingFiles) {
+        const res = await fetch('/api/anexos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            demandaId: parseInt(demandaId),
+            nomeArquivo: pf.file.name,
+            usuario: anexoUsuario,
+            tipoArquivo: pf.file.type,
+            tamanhoArquivo: pf.file.size,
+            conteudoBase64: pf.base64,
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || `Falha ao enviar ${pf.file.name}`);
+        }
       }
-      setSelectedFile(null);
+      setPendingFiles([]);
       setAnexoUsuario('');
-      setSuccess('Anexo adicionado com sucesso!');
+      setSuccess('Anexo(s) adicionado(s) com sucesso!');
       fetchDemanda();
     } catch (err) {
-      setError('Falha ao fazer upload');
+      setError(err instanceof Error ? err.message : 'Falha ao fazer upload');
       console.error(err);
     } finally {
       setUploading(false);
@@ -259,6 +245,23 @@ export default function DemandaDetailPage({
     } catch (err) {
       setError('Falha ao atualizar status');
       console.error(err);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!demandaId) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/demandas/${demandaId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Falha ao excluir demanda');
+      }
+      router.push('/demandas');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Falha ao excluir');
+      setDeleting(false);
     }
   };
 
@@ -301,7 +304,7 @@ export default function DemandaDetailPage({
           </Link>
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <span className="font-mono text-sm font-semibold text-muted tracking-wider">
                   DEM-{String(demanda.numero).padStart(4, '0')}
                 </span>
@@ -343,6 +346,33 @@ export default function DemandaDetailPage({
                 )}
               </div>
               <h1 className="text-xl font-bold tracking-tight mt-2">{demanda.titulo}</h1>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/demandas/${demanda.id}/editar`}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-foreground bg-[var(--surface)] border border-[var(--border)] rounded-lg hover:bg-[var(--surface-hover)] transition-colors"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+                Editar
+              </Link>
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-[var(--danger)] hover:opacity-90 rounded-lg transition-opacity"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+                Excluir
+              </button>
             </div>
           </div>
         </div>
@@ -443,7 +473,7 @@ export default function DemandaDetailPage({
                 <div className="space-y-3">
                   {demanda.decisoes.map((decisao) => (
                     <div key={decisao.id} className="border border-[var(--border)] rounded-lg p-4">
-                      <p className="text-sm">{decisao.descricao}</p>
+                      <p className="text-sm whitespace-pre-wrap">{decisao.descricao}</p>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted">
                         <span>{new Date(decisao.dataDecisao).toLocaleDateString('pt-BR')}</span>
                         <span>Origem: {decisao.origem}</span>
@@ -497,7 +527,7 @@ export default function DemandaDetailPage({
                 <div className="space-y-3">
                   {demanda.comentarios.map((comentario) => (
                     <div key={comentario.id} className="border border-[var(--border)] rounded-lg p-4">
-                      <p className="text-sm">{comentario.comentario}</p>
+                      <p className="text-sm whitespace-pre-wrap">{comentario.comentario}</p>
                       <p className="text-xs text-muted mt-2">
                         Por <span className="font-medium text-foreground">{comentario.autor}</span> em {new Date(comentario.dataCriacao).toLocaleString('pt-BR')}
                       </p>
@@ -510,7 +540,7 @@ export default function DemandaDetailPage({
             {/* Anexos */}
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6">
               <h2 className="text-sm font-semibold text-foreground mb-4">Anexos</h2>
-              <form onSubmit={handleUpload} className="mb-6 p-4 bg-[var(--background)] rounded-lg space-y-3">
+              <form onSubmit={handleUpload} className="mb-6 p-4 bg-[var(--background)] rounded-lg space-y-4">
                 <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">Novo Anexo</h3>
                 <div>
                   <label className="block text-xs font-medium text-muted mb-1">Usuário *</label>
@@ -519,32 +549,22 @@ export default function DemandaDetailPage({
                     value={anexoUsuario}
                     onChange={(e) => setAnexoUsuario(e.target.value)}
                     required
-                    className="w-full px-3 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
+                    placeholder="Quem está enviando?"
+                    className="w-full px-3 py-2 bg-[var(--surface)] border border-[var(--border)] rounded-lg text-sm placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-muted mb-1">Arquivo *</label>
-                  <input
-                    type="file"
-                    onChange={handleFileSelect}
-                    accept={FILE_EXTENSIONS.join(',')}
-                    className="w-full text-sm"
-                  />
-                  <p className="text-xs text-muted mt-1">
-                    Tipos: {FILE_EXTENSIONS.join(', ')} | Máximo: 10MB
-                  </p>
-                </div>
-                {selectedFile && (
-                  <p className="text-sm text-emerald-600">
-                    Selecionado: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
-                  </p>
-                )}
+                <FileDropzone
+                  onFilesChange={setPendingFiles}
+                  accept={FILE_EXTENSIONS}
+                  maxSize={MAX_FILE_SIZE}
+                  multiple
+                />
                 <button
                   type="submit"
-                  disabled={!selectedFile || !anexoUsuario || uploading}
+                  disabled={pendingFiles.length === 0 || !anexoUsuario || uploading}
                   className="px-4 py-2 text-sm font-medium text-white bg-[var(--primary)] hover:bg-[var(--primary-hover)] rounded-lg transition-colors disabled:opacity-50"
                 >
-                  {uploading ? 'Enviando...' : 'Enviar Anexo'}
+                  {uploading ? 'Enviando...' : `Enviar ${pendingFiles.length > 0 ? `(${pendingFiles.length})` : 'Anexo'}`}
                 </button>
               </form>
 
@@ -588,13 +608,22 @@ export default function DemandaDetailPage({
           {/* Sidebar - Historico */}
           <div className="lg:col-span-1">
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-6 sticky top-4">
-              <h2 className="text-sm font-semibold text-foreground mb-4">Histórico</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-foreground">Histórico</h2>
+                <Link
+                  href={`/demandas/${demanda.id}/historico`}
+                  className="text-xs font-medium text-[var(--primary)] hover:text-[var(--primary-hover)] transition-colors"
+                >
+                  Ver tudo →
+                </Link>
+              </div>
               {demanda.historico.length === 0 ? (
                 <p className="text-sm text-muted">Nenhum histórico registrado.</p>
               ) : (
-                <div className="space-y-4 max-h-[80vh] overflow-y-auto">
+                <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
                   {[...demanda.historico]
                     .sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime())
+                    .slice(0, 10)
                     .map((item) => (
                       <div key={item.id} className="border-l-2 border-[var(--border)] pl-3 pb-3 last:pb-0">
                         <p className="text-sm font-medium">{item.acao}</p>
@@ -604,21 +633,45 @@ export default function DemandaDetailPage({
                         {(item.valorAnterior || item.valorNovo) && (
                           <div className="mt-1.5 text-xs space-y-0.5">
                             {item.valorAnterior && (
-                              <p className="text-red-500 line-through">De: {item.valorAnterior}</p>
+                              <p className="text-red-500 line-through whitespace-pre-wrap break-words">De: {item.valorAnterior}</p>
                             )}
                             {item.valorNovo && (
-                              <p className="text-emerald-600">Para: {item.valorNovo}</p>
+                              <p className="text-emerald-600 whitespace-pre-wrap break-words">Para: {item.valorNovo}</p>
                             )}
                           </div>
                         )}
                       </div>
                     ))}
+                  {demanda.historico.length > 10 && (
+                    <Link
+                      href={`/demandas/${demanda.id}/historico`}
+                      className="block text-center text-xs font-medium text-[var(--primary)] hover:text-[var(--primary-hover)] py-2 transition-colors"
+                    >
+                      Ver mais {demanda.historico.length - 10} registros →
+                    </Link>
+                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      <ConfirmDeleteModal
+        key={showDeleteModal ? "open" : "closed"}
+        open={showDeleteModal}
+        numero={demanda.numero}
+        titulo={demanda.titulo}
+        loading={deleting}
+        errorMessage={deleteError}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          if (!deleting) {
+            setShowDeleteModal(false);
+            setDeleteError(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -628,7 +681,7 @@ function InfoField({ label, value, multiline }: { label: string; value: string; 
     <div>
       <p className="text-xs font-medium text-muted mb-1">{label}</p>
       {multiline ? (
-        <p className="text-sm whitespace-pre-wrap">{value}</p>
+        <p className="text-sm whitespace-pre-wrap break-words">{value}</p>
       ) : (
         <p className="text-sm">{value}</p>
       )}

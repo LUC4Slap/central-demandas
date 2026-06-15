@@ -15,7 +15,7 @@ model Demanda {
   numero          Int       @unique
   sistema         String
   titulo          String
-  descricao       String
+  descricao       String    @db.Text
   solicitante     String
   orgao           String?
   origem          String
@@ -42,7 +42,7 @@ model Decisao {
   demanda         Demanda   @relation(fields: [demandaId], references: [id], onDelete: Cascade)
   demandaId       Int
   dataDecisao     DateTime
-  descricao       String
+  descricao       String    @db.Text
   participantes   String?
   origem          String
   dataCriacao     DateTime  @default(now())
@@ -55,7 +55,7 @@ model Comentario {
   demanda         Demanda   @relation(fields: [demandaId], references: [id], onDelete: Cascade)
   demandaId       Int
   autor           String
-  comentario      String
+  comentario      String    @db.Text
   dataCriacao     DateTime  @default(now())
 
   @@index([demandaId])
@@ -83,8 +83,8 @@ model Historico {
   acao            String
   usuario         String
   dataHora        DateTime  @default(now())
-  valorAnterior   String?
-  valorNovo       String?
+  valorAnterior   String?   @db.Text
+  valorNovo       String?   @db.Text
 
   @@index([demandaId])
   @@index([dataHora])
