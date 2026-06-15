@@ -24,7 +24,7 @@ services:
     working_dir: /app
     command: sh -c "npm install && npx prisma generate && npx prisma db push && npm run dev -- -H 0.0.0.0"
     ports:
-      - "9001:3000"
+      - "8002:3000"
     environment:
       NODE_ENV: development
       DATABASE_URL: mysql://demandas:demandaspass@mysql:3306/central_demandas?allowPublicKeyRetrieval=true
