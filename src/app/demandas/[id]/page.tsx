@@ -308,6 +308,17 @@ export default function DemandaDetailPage({
                 <span className="font-mono text-sm font-semibold text-muted tracking-wider">
                   DEM-{String(demanda.numero).padStart(4, '0')}
                 </span>
+                {demanda.anexos.length > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[var(--primary)]/10 text-[var(--primary)] text-xs font-medium"
+                    title={`${demanda.anexos.length} anexo${demanda.anexos.length === 1 ? '' : 's'}`}
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                    {demanda.anexos.length} anexo{demanda.anexos.length === 1 ? '' : 's'}
+                  </span>
+                )}
                 {editingStatus ? (
                   <div className="flex items-center gap-2">
                     <select

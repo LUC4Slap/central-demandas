@@ -22,7 +22,7 @@ export default function ConfirmDeleteModal({
   onCancel,
 }: ConfirmDeleteModalProps) {
   const [typed, setTyped] = useState("");
-  const expected = String(numero).padStart(4, "0");
+  const expected = `DEM-${String(numero).padStart(4, "0")}`;
   const matches = typed.trim() === expected;
 
   useEffect(() => {

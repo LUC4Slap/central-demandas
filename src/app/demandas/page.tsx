@@ -217,6 +217,20 @@ export default function DemandasPage() {
                       <p className="text-xs text-muted truncate">{demanda.responsavel}</p>
                     </div>
 
+                    {/* Anexos */}
+                    {demanda.anexos.length > 0 && (
+                      <div
+                        className="hidden md:flex flex-shrink-0 items-center gap-1 text-[var(--primary)]"
+                        title={`${demanda.anexos.length} anexo${demanda.anexos.length === 1 ? '' : 's'}`}
+                        aria-label={`${demanda.anexos.length} anexo${demanda.anexos.length === 1 ? '' : 's'}`}
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                        </svg>
+                        <span className="text-xs font-medium">{demanda.anexos.length}</span>
+                      </div>
+                    )}
+
                     {/* Status */}
                     <div className="flex-shrink-0">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ${STATUS_COLORS[demanda.status] || 'bg-gray-50 text-gray-700 ring-gray-600/20'}`}>
