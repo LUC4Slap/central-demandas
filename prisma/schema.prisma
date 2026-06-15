@@ -71,7 +71,7 @@ model Anexo {
   usuario         String
   tipoArquivo     String?
   tamanhoArquivo  Int?
-  conteudoBase64  String?
+  conteudoBase64  String?   @db.LongText
 
   @@index([demandaId])
 }
