@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 interface ConfirmDeleteModalProps {
   open: boolean;
@@ -21,10 +21,6 @@ export default function ConfirmDeleteModal({
   onConfirm,
   onCancel,
 }: ConfirmDeleteModalProps) {
-  const [typed, setTyped] = useState("");
-  const expected = `DEM-${String(numero).padStart(4, "0")}`;
-  const matches = typed.trim() === expected;
-
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -39,6 +35,8 @@ export default function ConfirmDeleteModal({
   }, [open, loading, onCancel]);
 
   if (!open) return null;
+
+  const expected = `DEM-${String(numero).padStart(4, "0")}`;
 
   return (
     <div
@@ -80,30 +78,15 @@ export default function ConfirmDeleteModal({
 
         <div className="bg-[var(--background)] border border-[var(--border)] rounded-lg p-3 mb-4">
           <p className="text-xs text-muted uppercase tracking-wider">Demanda</p>
-          <p className="text-sm font-semibold font-mono mt-0.5">DEM-{expected}</p>
+          <p className="text-sm font-semibold font-mono mt-0.5">{expected}</p>
           <p className="text-sm text-foreground mt-1 line-clamp-2">{titulo}</p>
         </div>
 
-        <label className="block text-sm font-medium text-foreground mb-2">
-          Para confirmar, digite{" "}
-          <span className="font-mono font-semibold text-[var(--danger)]">DEM-{expected}</span>{" "}
-          abaixo:
-        </label>
-        <input
-          type="text"
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          placeholder={`DEM-${expected}`}
-          autoComplete="off"
-          autoFocus
-          className="w-full px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-[var(--danger)] focus:border-transparent"
-        />
-
         {errorMessage && (
-          <p className="mt-3 text-sm text-red-700">{errorMessage}</p>
+          <p className="mb-4 text-sm text-red-700">{errorMessage}</p>
         )}
 
-        <div className="mt-6 flex items-center justify-end gap-3">
+        <div className="flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}
@@ -115,8 +98,8 @@ export default function ConfirmDeleteModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={!matches || loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-[var(--danger)] hover:opacity-90 rounded-lg transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium text-white bg-[var(--danger)] hover:opacity-90 rounded-lg transition-opacity disabled:opacity-50"
           >
             {loading ? "Excluindo..." : "Excluir definitivamente"}
           </button>

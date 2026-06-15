@@ -59,9 +59,12 @@ export default function NovaDemandaPage() {
 
       if (pendingFiles.length > 0) {
         setUploadingFiles(true);
+        const uploadErrors: string[] = [];
+        let uploaded = 0;
+
         for (const pf of pendingFiles) {
           try {
-            await fetch('/api/anexos', {
+            const uploadRes = await fetch('/api/anexos', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -73,9 +76,30 @@ export default function NovaDemandaPage() {
                 conteudoBase64: pf.base64,
               }),
             });
-          } catch {
-            setError(`Falha ao enviar anexo: ${pf.file.name}`);
+            if (!uploadRes.ok) {
+              const errData = await uploadRes.json().catch(() => ({}));
+              const detail = errData.error
+                ? (typeof errData.error === 'string' ? errData.error : JSON.stringify(errData.error))
+                : `HTTP ${uploadRes.status}`;
+              uploadErrors.push(`${pf.file.name}: ${detail}`);
+            } else {
+              uploaded += 1;
+            }
+          } catch (uploadErr) {
+            uploadErrors.push(
+              `${pf.file.name}: ${uploadErr instanceof Error ? uploadErr.message : 'erro de rede'}`,
+            );
           }
+        }
+
+        if (uploadErrors.length > 0) {
+          const summary = uploaded > 0
+            ? `Demanda criada, mas apenas ${uploaded} de ${pendingFiles.length} anexo(s) foram enviados. Erros: ${uploadErrors.join(' | ')}`
+            : `Demanda criada, mas nenhum anexo foi enviado. Erros: ${uploadErrors.join(' | ')}`;
+          setError(summary);
+          setLoading(false);
+          setUploadingFiles(false);
+          return;
         }
       }
 
@@ -312,7 +336,11 @@ export default function NovaDemandaPage() {
               disabled={isSubmitting}
               className="px-4 py-2.5 text-sm font-medium text-white bg-[var(--primary)] hover:bg-[var(--primary-hover)] rounded-lg transition-colors disabled:opacity-50"
             >
-              {uploadingFiles ? 'Enviando anexos...' : loading ? 'Salvando...' : 'Criar Demanda'}
+              {uploadingFiles
+                ? `Enviando anexos (${pendingFiles.length})...`
+                : loading
+                  ? 'Salvando...'
+                  : 'Criar Demanda'}
             </button>
           </div>
         </form>

@@ -669,7 +669,6 @@ export default function DemandaDetailPage({
       </div>
 
       <ConfirmDeleteModal
-        key={showDeleteModal ? "open" : "closed"}
         open={showDeleteModal}
         numero={demanda.numero}
         titulo={demanda.titulo}
