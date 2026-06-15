@@ -66,7 +66,8 @@ export default function ResponsaveisPage() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, type } = e.target;
+    const checked = e.target instanceof HTMLInputElement ? e.target.checked : undefined;
     if (name === 'setorId') {
       setFormData(prev => ({ ...prev, setorId: value ? parseInt(value) : null }));
     } else {
