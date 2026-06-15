@@ -3,11 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-
-interface Responsavel {
-  id: number;
-  nome: string;
-}
+import type { Responsavel } from '@/types';
 
 interface PendingFile {
   file: File;

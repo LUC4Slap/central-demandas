@@ -1,22 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-
-interface Setor {
-  id: number;
-  nome: string;
-}
-
-interface Responsavel {
-  id: number;
-  nome: string;
-  email: string | null;
-  setorId: number | null;
-  setor: Setor | null;
-  ativo: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { Setor, Responsavel } from '@/types';
 
 export default function ResponsaveisPage() {
   const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
