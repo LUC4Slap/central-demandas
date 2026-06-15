@@ -1,16 +1,20 @@
 import { PrismaClient } from '@/generated/prisma/client';
-import { PrismaSqlite } from 'prisma-adapter-sqlite';
+import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const adapter = new PrismaSqlite({
-  url: process.env.DATABASE_URL || 'file:./dev.db',
-});
+function buildAdapter() {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error('DATABASE_URL is not set');
+  }
+  return new PrismaMariaDb(url);
+}
 
 export const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient({ adapter });
+  new PrismaClient({ adapter: buildAdapter() });
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
